@@ -1,6 +1,9 @@
 package com.flashlight.tvlauncher.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -33,7 +36,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -41,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -65,6 +72,7 @@ import com.flashlight.tvlauncher.HomeViewModel
 import com.flashlight.tvlauncher.R
 import com.flashlight.tvlauncher.data.AppEntry
 import com.flashlight.tvlauncher.data.HomePrefs
+import com.flashlight.tvlauncher.data.NetworkKind
 import com.flashlight.tvlauncher.data.TvInput
 import com.flashlight.tvlauncher.data.openPlayer
 import com.flashlight.tvlauncher.data.togglePlayPause
@@ -116,8 +124,39 @@ private fun HomeContent(viewModel: HomeViewModel) {
     var menuApp by remember { mutableStateOf<AppEntry?>(null) }
     var hiddenAppsOpen by remember { mutableStateOf(false) }
     var movingKey by remember { mutableStateOf<String?>(null) }
-    // Увеличивается, когда фокус надо вернуть на первое приложение (например, сфокусированное скрыли)
+    // Куда вернуть фокус: последнее открытое приложение, null — первое в сетке.
+    // Фокус переставляется, когда увеличивается refocusToken
+    var focusKey by rememberSaveable { mutableStateOf<String?>(null) }
     var refocusToken by remember { mutableIntStateOf(0) }
+    // Переставлять фокус при возвращении, только если уходили в приложение из сетки
+    // (или это первый запуск); после плиток и виджетов фокус остаётся, где был
+    var refocusOnReturn by remember { mutableStateOf(true) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Плавное появление при каждом возвращении на главный экран (из приложения или при запуске).
+    // Ждём загрузки списка приложений, чтобы не показать пустой экран
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(apps != null) {
+        if (apps == null) return@LaunchedEffect
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (refocusOnReturn) {
+                refocusOnReturn = false
+                refocusToken++
+            }
+            appear.snapTo(0f)
+            appear.animateTo(1f, tween(durationMillis = 450, easing = FastOutSlowInEasing))
+        }
+    }
+
+    // «Нет сети» показываем не сразу: при старте и переподключении Wi-Fi сеть пропадает на секунду
+    val offline by produceState(false, network) {
+        value = if (network == NetworkKind.None) {
+            delay(2_000)
+            true
+        } else {
+            false
+        }
+    }
 
     // Домашний экран: «Назад» никуда не ведёт, а в режиме перемещения — завершает его
     BackHandler {}
@@ -146,6 +185,7 @@ private fun HomeContent(viewModel: HomeViewModel) {
                     AppAction.ToggleFavorite -> viewModel.toggleFavorite(app)
                     AppAction.Hide -> {
                         viewModel.hide(app)
+                        focusKey = null
                         refocusToken++
                     }
                     AppAction.Info -> context.openAppInfo(app)
@@ -168,6 +208,7 @@ private fun HomeContent(viewModel: HomeViewModel) {
         // Вернули последнее скрытое приложение: кнопка «Скрытые» исчезла вместе с фокусом
         if (hiddenAppsOpen && hiddenApps.isEmpty()) {
             hiddenAppsOpen = false
+            focusKey = null
             refocusToken++
         }
     }
@@ -256,7 +297,6 @@ private fun HomeContent(viewModel: HomeViewModel) {
     var swallowKeyUp by remember { mutableStateOf<Key?>(null) }
     val anyDialogOpen = cityPickerOpen || wallpaperPickerOpen || menuApp != null || hiddenAppsOpen ||
         tvInputs != null || sleepDialogOpen || sleepAdminDialogOpen || mediaAccessDialogOpen
-    val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lastInteraction, prefs.screensaverMinutes, anyDialogOpen, screensaverOn) {
         if (prefs.screensaverMinutes == 0 || anyDialogOpen || screensaverOn) return@LaunchedEffect
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -269,7 +309,9 @@ private fun HomeContent(viewModel: HomeViewModel) {
         Column {
             HomeWidgets(
                 prefs = prefs,
-                weatherContent = { WeatherWidget(weather, onClick = { cityPickerOpen = true }, Modifier.size(170.dp)) },
+                weatherContent = {
+                    WeatherWidget(weather, onClick = { cityPickerOpen = true }, Modifier.size(170.dp), offline = offline)
+                },
                 nowPlayingContent = if (prefs.showNowPlaying && mediaAccess && (nowPlaying != null || yandexMusic != null)) {
                     {
                         val playing = nowPlaying
@@ -298,6 +340,9 @@ private fun HomeContent(viewModel: HomeViewModel) {
                     onSystemSettings = context::openSystemSettings,
                     modifier = Modifier.padding(top = 20.dp),
                 )
+            }
+            if (offline) {
+                OfflineBanner(context::openNetworkSettings, Modifier.padding(top = 20.dp))
             }
         }
     }
@@ -358,22 +403,32 @@ private fun HomeContent(viewModel: HomeViewModel) {
                 )
             } else {
                 // Отступы 48/27 dp — безопасная зона телевизора (overscan)
-                Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = appear.value
+                            translationY = (1f - appear.value) * 24.dp.toPx()
+                        }
+                        .padding(horizontal = 48.dp, vertical = 27.dp),
+                ) {
                     val home = apps
                     if (home != null && home.favorites.isEmpty() && home.others.isEmpty() && home.hidden.isEmpty()) {
                         widgets()
-                        Text(
-                            text = stringResource(R.string.apps_empty),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        EmptyState(R.drawable.ic_apps, R.string.apps_empty, R.string.apps_empty_text)
                     } else if (home != null) {
                         AppGrid(
                             apps = home,
                             columns = prefs.columns,
                             header = widgets,
                             movingKey = movingKey,
+                            focusKey = focusKey,
                             refocusToken = refocusToken,
-                            onOpen = context::launchApp,
+                            onOpen = { app ->
+                                focusKey = app.key
+                                refocusOnReturn = true
+                                context.launchApp(app)
+                            },
                             onMenu = { menuApp = it },
                             onMove = viewModel::move,
                             onMoveDone = { movingKey = null },
@@ -408,6 +463,8 @@ private fun AppGrid(
     /** Виджеты над сеткой: прокручиваются вместе с приложениями */
     header: @Composable () -> Unit,
     movingKey: String?,
+    /** Приложение, на которое ставится фокус при каждом [refocusToken]; null или его нет — первое */
+    focusKey: String?,
     refocusToken: Int,
     onOpen: (AppEntry) -> Unit,
     onMenu: (AppEntry) -> Unit,
@@ -415,10 +472,19 @@ private fun AppGrid(
     onMoveDone: () -> Unit,
     onShowHidden: () -> Unit,
 ) {
-    val firstItemFocus = remember { FocusRequester() }
+    val targetFocus = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
-    val firstKey = (apps.favorites.firstOrNull() ?: apps.others.firstOrNull())?.key
     val hasFavorites = apps.favorites.isNotEmpty()
+    val hasApps = hasFavorites || apps.others.isNotEmpty()
+    // Индексы в сетке: сначала виджеты, затем «Избранное» с заголовком, затем «Приложения» с заголовком
+    val favoritesStart = 2
+    val othersStart = if (hasFavorites) favoritesStart + apps.favorites.size + 1 else 2
+    val targetIndex = focusKey?.let { key ->
+        apps.favorites.indexOfFirst { it.key == key }.takeIf { it >= 0 }?.let { favoritesStart + it }
+            ?: apps.others.indexOfFirst { it.key == key }.takeIf { it >= 0 }?.let { othersStart + it }
+    }
+    // Если запомненного приложения уже нет (скрыли, удалили) — первое в сетке
+    val targetKey = if (targetIndex != null) focusKey else (apps.favorites.firstOrNull() ?: apps.others.firstOrNull())?.key
 
     // Сетка держит позицию по ключу первого видимого элемента; без этого при появлении
     // раздела «Избранное» его заголовок уезжал бы за верхний край
@@ -426,7 +492,7 @@ private fun AppGrid(
     val movingApp = movingKey?.let { key -> (apps.favorites + apps.others).find { it.key == key } }
 
     val tile: @Composable LazyGridItemScope.(AppEntry) -> Unit = { app ->
-        val focusModifier = if (app.key == firstKey) Modifier.focusRequester(firstItemFocus) else Modifier
+        val focusModifier = if (app.key == targetKey) Modifier.focusRequester(targetFocus) else Modifier
         AppTile(
             app = app,
             onClick = { if (movingKey == null) onOpen(app) },
@@ -466,33 +532,55 @@ private fun AppGrid(
                 sectionHeader("header_favorites") { stringResource(R.string.favorites_title) }
                 appItems(apps.favorites, tile)
             }
-            sectionHeader("header_apps") { stringResource(R.string.apps_title) }
-            appItems(apps.others, tile)
-            if (apps.hidden.isNotEmpty()) {
-                item(key = "hidden_button", span = { GridItemSpan(maxLineSpan) }) {
-                    Box {
-                        Surface(
-                            onClick = onShowHidden,
-                            shape = ClickableSurfaceDefaults.shape(PillShape),
-                            colors = ClickableSurfaceDefaults.colors(
-                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                            ),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.hidden_apps_button, apps.hidden.size),
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                        }
+            if (hasApps) {
+                sectionHeader("header_apps") { stringResource(R.string.apps_title) }
+                appItems(apps.others, tile)
+            } else {
+                // Кнопка «Скрытые» здесь же, под текстом: отдельным элементом она уехала бы за экран
+                // и осталась несозданной — фокусу было бы некуда встать
+                item(key = "all_hidden", span = { GridItemSpan(maxLineSpan) }) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        EmptyState(R.drawable.ic_apps, R.string.apps_all_hidden, R.string.apps_all_hidden_text)
+                        HiddenAppsButton(apps.hidden.size, onShowHidden, Modifier.focusRequester(targetFocus))
                     }
+                }
+            }
+            if (hasApps && apps.hidden.isNotEmpty()) {
+                item(key = "hidden_button", span = { GridItemSpan(maxLineSpan) }) {
+                    Box { HiddenAppsButton(apps.hidden.size, onShowHidden) }
                 }
             }
         }
     }
 
+    val currentTargetIndex by rememberUpdatedState(targetIndex)
     LaunchedEffect(refocusToken) {
+        // Ленивая сетка не создаёт карточки за экраном — сперва прокручиваем к нужной
+        val index = currentTargetIndex
+        when {
+            index == null -> gridState.scrollToItem(0)
+            gridState.layoutInfo.visibleItemsInfo.none { it.index == index } -> gridState.scrollToItem(index)
+        }
         withFrameNanos {}
-        runCatching { firstItemFocus.requestFocus() }
+        runCatching { targetFocus.requestFocus() }
+    }
+}
+
+@Composable
+private fun HiddenAppsButton(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = ClickableSurfaceDefaults.shape(PillShape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+        ),
+    ) {
+        Text(
+            text = stringResource(R.string.hidden_apps_button, count),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 

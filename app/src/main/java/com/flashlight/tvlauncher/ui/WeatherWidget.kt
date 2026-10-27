@@ -11,14 +11,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.flashlight.tvlauncher.R
 import com.flashlight.tvlauncher.data.Weather
 import com.flashlight.tvlauncher.ui.theme.ScallopShape
 import kotlin.math.PI
@@ -27,7 +31,7 @@ private val WeatherShape = ScallopShape(lobes = 4, depth = 0.07f, rotation = PI.
 
 /**
  * Погода в стиле Pixel: фигура-«печенька», температура справа сверху,
- * иконка слева снизу. Пока данных нет, показывает «--°». По OK — [onClick].
+ * иконка слева снизу. Пока данных нет, показывает «--°» (и значок, если нет сети). По OK — [onClick].
  */
 @Composable
 fun WeatherWidget(
@@ -36,6 +40,8 @@ fun WeatherWidget(
     modifier: Modifier = Modifier,
     containerColor: Color = Color.White,
     textColor: Color = Color(0xFF1D1B20),
+    /** Нет сети и данных: вместо иконки погоды — перечёркнутый Wi-Fi */
+    offline: Boolean = false,
 ) {
     Surface(
         onClick = onClick,
@@ -74,6 +80,16 @@ fun WeatherWidget(
                 ) {
                     WeatherIcon(weather.condition, weather.isDay)
                 }
+            } else if (offline) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_wifi_off),
+                    contentDescription = stringResource(R.string.offline_title),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = side * 0.18f, bottom = side * 0.18f)
+                        .size(side * 0.28f),
+                    tint = textColor.copy(alpha = 0.45f),
+                )
             }
         }
     }

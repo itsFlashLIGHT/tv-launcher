@@ -15,6 +15,11 @@ android {
         versionName = "0.1.0"
     }
 
+    // Только наши языки: переводы библиотек на остальные не тащим в APK
+    androidResources {
+        localeFilters += listOf("en", "ru")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

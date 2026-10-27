@@ -43,7 +43,7 @@ fun QuickTilesRow(
 
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         QuickTile(
-            icon = R.drawable.ic_wifi,
+            icon = if (network == NetworkKind.None) R.drawable.ic_wifi_off else R.drawable.ic_wifi,
             title = stringResource(R.string.tile_network),
             status = stringResource(
                 when (network) {

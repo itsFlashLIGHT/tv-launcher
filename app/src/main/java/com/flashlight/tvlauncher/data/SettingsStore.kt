@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.Immutable
 import androidx.core.content.edit
+import com.flashlight.tvlauncher.R
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -41,6 +42,14 @@ data class HomePrefs(
 
 /** Настройки лаунчера в SharedPreferences */
 class SettingsStore(context: Context) {
+    // Город по умолчанию — Арсеньев; название берётся на языке системы
+    private val defaultCity = City(
+        name = context.getString(R.string.default_city_name),
+        region = context.getString(R.string.default_city_region),
+        latitude = 44.15695,
+        longitude = 133.27332,
+    )
+
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     val city: Flow<City> = observe(setOf(KEY_CITY), ::readCity)
@@ -106,7 +115,7 @@ class SettingsStore(context: Context) {
     }.distinctUntilChanged()
 
     private fun readCity(): City {
-        val json = prefs.getString(KEY_CITY, null)?.let(::JSONObject) ?: return DEFAULT_CITY
+        val json = prefs.getString(KEY_CITY, null)?.let(::JSONObject) ?: return defaultCity
         return City(
             name = json.getString("name"),
             region = json.optString("region"),
@@ -156,6 +165,5 @@ class SettingsStore(context: Context) {
         const val KEY_WALLPAPER = "wallpaper"
         const val KEY_SCREENSAVER = "screensaver_minutes"
         const val KEY_SCREENSAVER_NIGHT_DIM = "screensaver_night_dim"
-        val DEFAULT_CITY = City("Арсеньев", "Приморский Край, Россия", 44.15695, 133.27332)
     }
 }
