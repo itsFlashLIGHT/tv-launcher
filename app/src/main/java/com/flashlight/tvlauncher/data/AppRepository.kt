@@ -129,6 +129,10 @@ fun Context.uninstallApp(app: AppEntry) {
     runCatching { startActivity(intent) }
 }
 
+fun Context.openSystemSettings() {
+    runCatching { startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
 fun Context.openAppInfo(app: AppEntry) {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", app.packageName, null))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

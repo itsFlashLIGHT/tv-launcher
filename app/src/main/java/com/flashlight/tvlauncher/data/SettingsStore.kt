@@ -21,6 +21,16 @@ data class AppLayout(
     val order: List<String> = emptyList(),
 )
 
+/** Настройки вида главного экрана */
+@Immutable
+data class HomePrefs(
+    val columns: Int = 5,
+    val showClock: Boolean = true,
+    val showWeather: Boolean = true,
+    /** Медленный дрейф обоев; на слабом телевизоре можно выключить */
+    val animatedWallpaper: Boolean = true,
+)
+
 /** Настройки лаунчера в SharedPreferences */
 class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -28,6 +38,19 @@ class SettingsStore(context: Context) {
     val city: Flow<City> = observe(setOf(KEY_CITY), ::readCity)
 
     val appLayout: Flow<AppLayout> = observe(setOf(KEY_FAVORITES, KEY_HIDDEN, KEY_ORDER), ::readAppLayout)
+
+    val homePrefs: Flow<HomePrefs> =
+        observe(setOf(KEY_COLUMNS, KEY_SHOW_CLOCK, KEY_SHOW_WEATHER, KEY_ANIMATED_WALLPAPER), ::readHomePrefs)
+
+    fun updateHomePrefs(transform: (HomePrefs) -> HomePrefs) {
+        val home = transform(readHomePrefs())
+        prefs.edit {
+            putInt(KEY_COLUMNS, home.columns)
+            putBoolean(KEY_SHOW_CLOCK, home.showClock)
+            putBoolean(KEY_SHOW_WEATHER, home.showWeather)
+            putBoolean(KEY_ANIMATED_WALLPAPER, home.animatedWallpaper)
+        }
+    }
 
     fun setCity(city: City) {
         val json = JSONObject()
@@ -72,6 +95,16 @@ class SettingsStore(context: Context) {
         order = readStringList(KEY_ORDER),
     )
 
+    private fun readHomePrefs(): HomePrefs {
+        val defaults = HomePrefs()
+        return HomePrefs(
+            columns = prefs.getInt(KEY_COLUMNS, defaults.columns),
+            showClock = prefs.getBoolean(KEY_SHOW_CLOCK, defaults.showClock),
+            showWeather = prefs.getBoolean(KEY_SHOW_WEATHER, defaults.showWeather),
+            animatedWallpaper = prefs.getBoolean(KEY_ANIMATED_WALLPAPER, defaults.animatedWallpaper),
+        )
+    }
+
     private fun readStringList(key: String): List<String> {
         val array = prefs.getString(key, null)?.let(::JSONArray) ?: return emptyList()
         return (0 until array.length()).map(array::getString)
@@ -82,6 +115,10 @@ class SettingsStore(context: Context) {
         const val KEY_FAVORITES = "favorites"
         const val KEY_HIDDEN = "hidden"
         const val KEY_ORDER = "order"
+        const val KEY_COLUMNS = "columns"
+        const val KEY_SHOW_CLOCK = "show_clock"
+        const val KEY_SHOW_WEATHER = "show_weather"
+        const val KEY_ANIMATED_WALLPAPER = "animated_wallpaper"
         val DEFAULT_CITY = City("Арсеньев", "Приморский Край, Россия", 44.15695, 133.27332)
     }
 }

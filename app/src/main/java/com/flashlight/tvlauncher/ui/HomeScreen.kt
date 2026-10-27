@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,11 +40,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -51,20 +54,21 @@ import com.flashlight.tvlauncher.HomeApps
 import com.flashlight.tvlauncher.HomeViewModel
 import com.flashlight.tvlauncher.R
 import com.flashlight.tvlauncher.data.AppEntry
+import com.flashlight.tvlauncher.data.HomePrefs
 import com.flashlight.tvlauncher.data.launchApp
 import com.flashlight.tvlauncher.data.openAppInfo
 import com.flashlight.tvlauncher.data.uninstallApp
 import com.flashlight.tvlauncher.ui.theme.PillShape
-
-private const val GRID_COLUMNS = 5
 
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val apps by viewModel.apps.collectAsStateWithLifecycle()
     val weather by viewModel.weather.collectAsStateWithLifecycle()
     val city by viewModel.city.collectAsStateWithLifecycle()
+    val prefs by viewModel.homePrefs.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    var settingsOpen by remember { mutableStateOf(false) }
     var cityPickerOpen by remember { mutableStateOf(false) }
     var menuApp by remember { mutableStateOf<AppEntry?>(null) }
     var hiddenAppsOpen by remember { mutableStateOf(false) }
@@ -125,48 +129,66 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Wallpaper()
-        // Отступы 48/27 dp — безопасная зона телевизора (overscan)
-        Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AnalogClockWidget(Modifier.size(190.dp))
-                Spacer(Modifier.width(28.dp))
-                WeatherWidget(weather, onClick = { cityPickerOpen = true }, Modifier.size(170.dp))
-            }
-            Spacer(Modifier.height(12.dp))
-            val home = apps
-            if (home != null && home.favorites.isEmpty() && home.others.isEmpty() && home.hidden.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.apps_empty),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else if (home != null) {
-                AppGrid(
-                    apps = home,
-                    movingKey = movingKey,
-                    refocusToken = refocusToken,
-                    onOpen = context::launchApp,
-                    onMenu = { menuApp = it },
-                    onMove = viewModel::move,
-                    onMoveDone = { movingKey = null },
-                    onShowHidden = { hiddenAppsOpen = true },
-                )
-            }
-        }
+    val widgets: @Composable () -> Unit = {
+        HomeWidgets(
+            prefs = prefs,
+            weatherContent = { WeatherWidget(weather, onClick = { cityPickerOpen = true }, Modifier.size(170.dp)) },
+            onOpenSettings = { settingsOpen = true },
+        )
+    }
 
-        if (movingKey != null) {
-            Text(
-                text = stringResource(R.string.move_hint),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 27.dp)
-                    .clip(PillShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-                    .padding(horizontal = 24.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+    Box(Modifier.fillMaxSize()) {
+        Wallpaper(animated = prefs.animatedWallpaper)
+
+        if (settingsOpen) {
+            SettingsScreen(
+                city = city,
+                prefs = prefs,
+                hiddenCount = hiddenApps.size,
+                onPickCity = { cityPickerOpen = true },
+                onPrefsChange = viewModel::updateHomePrefs,
+                onShowHidden = { hiddenAppsOpen = true },
+                onClose = { settingsOpen = false },
             )
+        } else {
+            // Отступы 48/27 dp — безопасная зона телевизора (overscan)
+            Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
+                val home = apps
+                if (home != null && home.favorites.isEmpty() && home.others.isEmpty() && home.hidden.isEmpty()) {
+                    widgets()
+                    Text(
+                        text = stringResource(R.string.apps_empty),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (home != null) {
+                    AppGrid(
+                        apps = home,
+                        columns = prefs.columns,
+                        header = widgets,
+                        movingKey = movingKey,
+                        refocusToken = refocusToken,
+                        onOpen = context::launchApp,
+                        onMenu = { menuApp = it },
+                        onMove = viewModel::move,
+                        onMoveDone = { movingKey = null },
+                        onShowHidden = { hiddenAppsOpen = true },
+                    )
+                }
+            }
+
+            if (movingKey != null) {
+                Text(
+                    text = stringResource(R.string.move_hint),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 27.dp)
+                        .clip(PillShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
     }
 }
@@ -174,6 +196,9 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 @Composable
 private fun AppGrid(
     apps: HomeApps,
+    columns: Int,
+    /** Виджеты над сеткой: прокручиваются вместе с приложениями */
+    header: @Composable () -> Unit,
     movingKey: String?,
     refocusToken: Int,
     onOpen: (AppEntry) -> Unit,
@@ -204,7 +229,7 @@ private fun AppGrid(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(GRID_COLUMNS),
+        columns = GridCells.Fixed(columns),
         state = gridState,
         // В режиме перемещения стрелки двигают приложение, а не фокус
         modifier = Modifier.onPreviewKeyEvent { event ->
@@ -212,8 +237,8 @@ private fun AppGrid(
             when (event.key) {
                 Key.DirectionLeft -> if (event.type == KeyEventType.KeyDown) onMove(app, -1)
                 Key.DirectionRight -> if (event.type == KeyEventType.KeyDown) onMove(app, 1)
-                Key.DirectionUp -> if (event.type == KeyEventType.KeyDown) onMove(app, -GRID_COLUMNS)
-                Key.DirectionDown -> if (event.type == KeyEventType.KeyDown) onMove(app, GRID_COLUMNS)
+                Key.DirectionUp -> if (event.type == KeyEventType.KeyDown) onMove(app, -columns)
+                Key.DirectionDown -> if (event.type == KeyEventType.KeyDown) onMove(app, columns)
                 // Выходим по отпусканию OK: иначе KeyUp долетит до карточки и запустит приложение
                 Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> if (event.type == KeyEventType.KeyUp) onMoveDone()
                 else -> return@onPreviewKeyEvent false
@@ -225,6 +250,7 @@ private fun AppGrid(
         horizontalArrangement = Arrangement.spacedBy(28.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        item(key = "widgets", span = { GridItemSpan(maxLineSpan) }) { header() }
         if (hasFavorites) {
             sectionHeader("header_favorites") { stringResource(R.string.favorites_title) }
             appItems(apps.favorites, tile)
@@ -271,4 +297,47 @@ private fun LazyGridScope.sectionHeader(key: String, title: @Composable () -> St
 
 private fun LazyGridScope.appItems(apps: List<AppEntry>, tile: @Composable LazyGridItemScope.(AppEntry) -> Unit) {
     items(apps, key = { it.key }) { app -> tile(app) }
+}
+
+/** Верхний ряд: часы и погода (если включены в настройках) и кнопка настроек справа */
+@Composable
+private fun HomeWidgets(
+    prefs: HomePrefs,
+    weatherContent: @Composable () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (prefs.showClock) {
+            AnalogClockWidget(Modifier.size(190.dp))
+            Spacer(Modifier.width(28.dp))
+        }
+        if (prefs.showWeather) weatherContent()
+        Spacer(Modifier.weight(1f))
+        SettingsButton(onOpenSettings, Modifier.align(Alignment.Top))
+    }
+}
+
+@Composable
+private fun SettingsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        modifier = modifier.size(56.dp),
+        shape = ClickableSurfaceDefaults.shape(CircleShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = colors.surface.copy(alpha = 0.6f),
+            contentColor = colors.onSurface,
+            focusedContainerColor = colors.onSurface,
+            focusedContentColor = colors.surface,
+        ),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                painter = painterResource(R.drawable.ic_settings),
+                contentDescription = stringResource(R.string.settings_title),
+                modifier = Modifier.size(28.dp),
+            )
+        }
+    }
 }

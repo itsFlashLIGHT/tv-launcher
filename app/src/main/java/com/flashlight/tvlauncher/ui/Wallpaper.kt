@@ -16,18 +16,28 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 
-/** Встроенные обои: медленно дрейфующие цветные пятна на тёмном фоне */
+/** Встроенные обои: медленно дрейфующие цветные пятна на тёмном фоне; без [animated] — неподвижные */
 @Composable
-fun Wallpaper(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "wallpaper")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(60_000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "phase",
-    )
+fun Wallpaper(animated: Boolean, modifier: Modifier = Modifier) {
+    if (animated) {
+        val transition = rememberInfiniteTransition(label = "wallpaper")
+        val phase by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(60_000, easing = LinearEasing), RepeatMode.Reverse),
+            label = "phase",
+        )
+        WallpaperCanvas({ phase }, modifier)
+    } else {
+        WallpaperCanvas({ 0.5f }, modifier)
+    }
+}
 
+/** [phaseProvider] читается внутри отрисовки: анимация перерисовывает холст без рекомпозиции */
+@Composable
+private fun WallpaperCanvas(phaseProvider: () -> Float, modifier: Modifier) {
     Canvas(modifier.fillMaxSize()) {
+        val phase = phaseProvider()
         val w = size.width
         val h = size.height
         drawRect(Color(0xFF0F0D1A))

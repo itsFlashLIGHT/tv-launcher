@@ -8,6 +8,7 @@ import com.flashlight.tvlauncher.data.AppEntry
 import com.flashlight.tvlauncher.data.AppLayout
 import com.flashlight.tvlauncher.data.AppRepository
 import com.flashlight.tvlauncher.data.City
+import com.flashlight.tvlauncher.data.HomePrefs
 import com.flashlight.tvlauncher.data.SettingsStore
 import com.flashlight.tvlauncher.data.Weather
 import com.flashlight.tvlauncher.data.WeatherRepository
@@ -51,6 +52,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val city: StateFlow<City?> = settings.city
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val homePrefs: StateFlow<HomePrefs> = settings.homePrefs
+        .stateIn(viewModelScope, SharingStarted.Eagerly, HomePrefs())
+
+    fun updateHomePrefs(transform: (HomePrefs) -> HomePrefs) = settings.updateHomePrefs(transform)
 
     /** null — погода ещё не загружена; при ошибке сети остаётся последнее значение */
     val weather: StateFlow<Weather?> = settings.city
