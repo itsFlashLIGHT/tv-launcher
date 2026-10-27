@@ -91,10 +91,20 @@ adb uninstall com.flashlight.tvlauncher
 ## Сборка
 
 - Android Studio (или JDK 17+) и Android SDK Platform 37.
-- `./gradlew :app:assembleDebug` — отладочная сборка, `./gradlew :app:assembleRelease` — релизная со сжатием кода. Релиз пока подписывается отладочным ключом.
+- `./gradlew :app:assembleDebug` — отладочная сборка, `./gradlew :app:assembleRelease` — релизная со сжатием кода.
 - Минимальная версия Android — 11 (API 30).
 
 **Стек:** Kotlin 2.4, Jetpack Compose, [Compose for TV](https://developer.android.com/jetpack/androidx/releases/tv) (tv-material 1.1), Material 3, AndroidX Lifecycle. Сеть — `HttpURLConnection` и `org.json`, без сторонних библиотек.
+
+### Подпись релизов
+
+Релизы подписываются постоянным ключом, поэтому новые версии ставятся поверх старых без удаления. Ключ хранится вне репозитория, в `~/.tv-launcher/`: там лежат `release.jks` и `keystore.properties` с паролем. Gradle находит его сам; другой путь можно передать через `-PreleaseKeystore=/путь/к/keystore.properties`. Без ключа релиз соберётся с отладочной подписью, а Gradle выведет предупреждение.
+
+Отпечаток сертификата (SHA-256):
+
+```
+65:3C:D6:C7:7A:57:4C:92:D6:DF:83:53:EE:E3:63:88:EC:CF:EC:1B:1E:C3:F7:EA:82:3A:A6:35:E5:60:A8:94
+```
 
 ### Проверка в эмуляторе
 

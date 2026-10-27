@@ -1,7 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Постоянный ключ релизов лежит вне репозитория: ~/.tv-launcher/keystore.properties
+// (путь можно переопределить свойством -PreleaseKeystore=...). Без него release
+// подписывается debug-ключом — такой APK не встанет поверх опубликованных версий
+val releaseKeystore = providers.gradleProperty("releaseKeystore")
+    .orElse(System.getProperty("user.home") + "/.tv-launcher/keystore.properties")
+    .map(::file)
+    .get()
+    .takeIf { it.isFile }
+    ?.let { file -> Properties().apply { file.inputStream().use(::load) } }
 
 android {
     namespace = "com.flashlight.tvlauncher"
@@ -20,13 +32,28 @@ android {
         localeFilters += listOf("en", "ru")
     }
 
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore.getProperty("storeFile"))
+                storePassword = releaseKeystore.getProperty("storePassword")
+                keyAlias = releaseKeystore.getProperty("keyAlias")
+                keyPassword = releaseKeystore.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Пока подписываем debug-ключом, чтобы release можно было поставить по ADB
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeystore != null) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn("Release keystore not found: signing release with the debug key")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
