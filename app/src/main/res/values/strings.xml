@@ -3,4 +3,9 @@
     <string name="app_name">TV Launcher</string>
     <string name="apps_title">Приложения</string>
     <string name="apps_empty">Приложения не найдены</string>
+    <string name="city_picker_title">Город для погоды</string>
+    <string name="city_picker_hint">Название города</string>
+    <string name="city_picker_current">Сейчас: %1$s</string>
+    <string name="city_picker_searching">Ищу…</string>
+    <string name="city_picker_not_found">Ничего не найдено</string>
 </resources>

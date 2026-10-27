@@ -5,19 +5,24 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -39,7 +44,22 @@ private const val GRID_COLUMNS = 5
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val apps by viewModel.apps.collectAsStateWithLifecycle()
+    val weather by viewModel.weather.collectAsStateWithLifecycle()
+    val city by viewModel.city.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var cityPickerOpen by remember { mutableStateOf(false) }
+
+    if (cityPickerOpen) {
+        CityPickerDialog(
+            currentCity = city,
+            onSearch = viewModel::searchCities,
+            onSelect = {
+                viewModel.selectCity(it)
+                cityPickerOpen = false
+            },
+            onDismiss = { cityPickerOpen = false },
+        )
+    }
 
     // Домашний экран: «Назад» никуда не ведёт
     BackHandler {}
@@ -48,7 +68,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         Wallpaper()
         // Отступы 48/27 dp — безопасная зона телевизора (overscan)
         Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
-            AnalogClockWidget(Modifier.size(190.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AnalogClockWidget(Modifier.size(190.dp))
+                Spacer(Modifier.width(28.dp))
+                WeatherWidget(weather, onClick = { cityPickerOpen = true }, Modifier.size(170.dp))
+            }
             Spacer(Modifier.height(20.dp))
             Text(
                 text = stringResource(R.string.apps_title),

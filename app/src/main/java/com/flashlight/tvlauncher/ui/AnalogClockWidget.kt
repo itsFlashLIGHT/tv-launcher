@@ -10,7 +10,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -19,6 +18,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import com.flashlight.tvlauncher.ui.theme.scallopPath
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -58,7 +58,7 @@ fun AnalogClockWidget(
     Canvas(modifier) {
         val radius = min(size.width, size.height) / 2f
 
-        drawPath(scallopPath(center, radius), faceColor)
+        drawPath(scallopPath(center, radius, lobes = 12, depth = 0.035f), faceColor)
 
         val labelStyle = TextStyle(
             color = labelColor,
@@ -112,20 +112,6 @@ fun AnalogClockWidget(
         }
         drawCircle(secondHandColor, radius = radius * 0.035f, center = center)
     }
-}
-
-/** Волнистый круг: радиус колеблется по косинусу, [lobes] «лепестков» */
-private fun scallopPath(center: Offset, radius: Float, lobes: Int = 12, depth: Float = 0.035f): Path {
-    val path = Path()
-    val steps = 360
-    for (i in 0..steps) {
-        val t = 2 * PI.toFloat() * i / steps
-        val r = radius * (1 - depth + depth * cos(lobes * t))
-        val point = center + polar(t, r)
-        if (i == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
-    }
-    path.close()
-    return path
 }
 
 /**
