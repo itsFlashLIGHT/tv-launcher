@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -47,8 +48,8 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         Wallpaper()
         // Отступы 48/27 dp — безопасная зона телевизора (overscan)
         Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
-            ClockWidget()
-            Spacer(Modifier.height(28.dp))
+            AnalogClockWidget(Modifier.size(190.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
                 text = stringResource(R.string.apps_title),
                 style = MaterialTheme.typography.titleLarge,
