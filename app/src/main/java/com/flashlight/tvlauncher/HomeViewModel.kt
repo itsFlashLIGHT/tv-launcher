@@ -1,6 +1,7 @@
 package com.flashlight.tvlauncher
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,6 +19,7 @@ import com.flashlight.tvlauncher.data.networkKind
 import com.flashlight.tvlauncher.data.SettingsStore
 import com.flashlight.tvlauncher.data.Weather
 import com.flashlight.tvlauncher.data.WeatherRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -95,7 +97,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Пустой список и при отсутствии совпадений, и при ошибке сети */
     suspend fun searchCities(query: String): List<City> =
-        runCatching { weatherRepository.searchCities(query) }.getOrDefault(emptyList())
+        runCatching { weatherRepository.searchCities(query) }
+            .onFailure { if (it !is CancellationException) Log.w(TAG, "Поиск города не удался", it) }
+            .getOrDefault(emptyList())
 
     fun toggleFavorite(app: AppEntry) = settings.updateAppLayout { layout ->
         val favorites = if (app.packageName in layout.favorites) {
@@ -157,6 +161,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
+        const val TAG = "HomeViewModel"
         const val WEATHER_REFRESH_MS = 30 * 60_000L
         const val WEATHER_RETRY_MS = 20_000L
     }

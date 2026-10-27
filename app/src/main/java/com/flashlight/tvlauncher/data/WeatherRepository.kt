@@ -1,6 +1,8 @@
 package com.flashlight.tvlauncher.data
 
+import android.util.Log
 import androidx.compose.runtime.Immutable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -28,9 +30,27 @@ data class City(
     val longitude: Double,
 )
 
-/** Погода и поиск городов через Open-Meteo: бесплатно, без ключа API */
+/**
+ * Погода и поиск городов через Open-Meteo: бесплатно, без ключа API.
+ * Если прогноз Open-Meteo недоступен (у некоторых провайдеров заблокирован его адрес),
+ * погода берётся у MET Norway — тоже бесплатно и без ключа.
+ */
 class WeatherRepository {
-    suspend fun current(city: City): Weather {
+    suspend fun current(city: City): Weather =
+        try {
+            openMeteo(city)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Open-Meteo недоступен, пробуем MET Norway", e)
+            try {
+                metNorway(city)
+            } catch (fallback: Exception) {
+                if (fallback !is CancellationException) Log.w(TAG, "MET Norway недоступен", fallback)
+                throw fallback
+            }
+        }
+
+    private suspend fun openMeteo(city: City): Weather {
         val current = getJson(
             "https://api.open-meteo.com/v1/forecast" +
                 "?latitude=${city.latitude}&longitude=${city.longitude}" +
@@ -40,6 +60,23 @@ class WeatherRepository {
             temperature = current.getDouble("temperature_2m").roundToInt(),
             condition = conditionFor(current.getInt("weather_code")),
             isDay = current.getInt("is_day") == 1,
+        )
+    }
+
+    /** https://api.met.no/weatherapi/locationforecast/2.0/documentation */
+    private suspend fun metNorway(city: City): Weather {
+        // MET Norway просит не больше 4 знаков после запятой в координатах
+        val data = getJson(
+            "https://api.met.no/weatherapi/locationforecast/2.0/compact" +
+                "?lat=${"%.4f".format(Locale.US, city.latitude)}" +
+                "&lon=${"%.4f".format(Locale.US, city.longitude)}",
+        ).getJSONObject("properties").getJSONArray("timeseries").getJSONObject(0).getJSONObject("data")
+        val symbol = data.optJSONObject("next_1_hours")?.optJSONObject("summary")?.optString("symbol_code")
+        return Weather(
+            temperature = data.getJSONObject("instant").getJSONObject("details")
+                .getDouble("air_temperature").roundToInt(),
+            condition = symbol?.let(::conditionForSymbol) ?: WeatherCondition.Cloudy,
+            isDay = symbol?.endsWith("_night") != true,
         )
     }
 
@@ -67,6 +104,8 @@ class WeatherRepository {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = TIMEOUT_MS
         connection.readTimeout = TIMEOUT_MS
+        // MET Norway отклоняет запросы без User-Agent, по которому можно связаться с автором
+        connection.setRequestProperty("User-Agent", USER_AGENT)
         try {
             JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
         } finally {
@@ -75,7 +114,27 @@ class WeatherRepository {
     }
 
     private companion object {
+        const val TAG = "WeatherRepository"
         const val TIMEOUT_MS = 10_000
+        const val USER_AGENT = "tv-launcher github.com/itsFlashLIGHT/tv-launcher"
+
+        /**
+         * Символы MET Norway, например «lightrainshowers_day»:
+         * https://github.com/metno/weathericons/tree/main/weather
+         */
+        fun conditionForSymbol(symbol: String): WeatherCondition {
+            val name = symbol.substringBefore('_')
+            return when {
+                "thunder" in name -> WeatherCondition.Thunderstorm
+                "snow" in name || "sleet" in name -> WeatherCondition.Snow
+                name == "lightrain" -> WeatherCondition.Drizzle
+                "rain" in name -> WeatherCondition.Rain
+                name == "fog" -> WeatherCondition.Fog
+                name == "clearsky" -> WeatherCondition.Clear
+                name == "fair" || name == "partlycloudy" -> WeatherCondition.PartlyCloudy
+                else -> WeatherCondition.Cloudy
+            }
+        }
 
         /** Коды WMO: https://open-meteo.com/en/docs */
         fun conditionFor(code: Int): WeatherCondition = when (code) {
