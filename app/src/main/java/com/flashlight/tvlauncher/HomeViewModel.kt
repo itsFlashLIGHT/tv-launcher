@@ -9,6 +9,12 @@ import com.flashlight.tvlauncher.data.AppLayout
 import com.flashlight.tvlauncher.data.AppRepository
 import com.flashlight.tvlauncher.data.City
 import com.flashlight.tvlauncher.data.HomePrefs
+import com.flashlight.tvlauncher.data.MediaSessions
+import com.flashlight.tvlauncher.data.NowPlaying
+import com.flashlight.tvlauncher.data.findYandexMusic
+import com.flashlight.tvlauncher.data.NetworkKind
+import com.flashlight.tvlauncher.data.SleepTimer
+import com.flashlight.tvlauncher.data.networkKind
 import com.flashlight.tvlauncher.data.SettingsStore
 import com.flashlight.tvlauncher.data.Weather
 import com.flashlight.tvlauncher.data.WeatherRepository
@@ -40,6 +46,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AppRepository(application)
     private val weatherRepository = WeatherRepository()
     private val settings = SettingsStore(application)
+    val sleepTimer = SleepTimer(application)
+    val mediaSessions = MediaSessions(application)
 
     private val installedApps: Flow<List<AppEntry>> = repository.changes()
         .onStart { emit(Unit) }
@@ -57,6 +65,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, HomePrefs())
 
     fun updateHomePrefs(transform: (HomePrefs) -> HomePrefs) = settings.updateHomePrefs(transform)
+
+    val network: StateFlow<NetworkKind> = application.networkKind()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NetworkKind.None)
+
+    /** Что играет в других приложениях; null — ничего или нет доступа */
+    val nowPlaying: StateFlow<NowPlaying?> = mediaSessions.nowPlaying()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Выдан ли доступ к медиасессиям (через слушатель уведомлений) */
+    val mediaAccess: StateFlow<Boolean> = mediaSessions.accessChanges()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Установленная Яндекс Музыка, включая скрытую с главного экрана */
+    val yandexMusic: StateFlow<AppEntry?> = apps
+        .map { home -> home?.let { (it.favorites + it.others + it.hidden).findYandexMusic() } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Время срабатывания таймера сна; 0 — выключен */
+    val sleepTimerEnd: StateFlow<Long> = settings.sleepTimerEnd
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
 
     /** null — погода ещё не загружена; при ошибке сети остаётся последнее значение */
     val weather: StateFlow<Weather?> = settings.city

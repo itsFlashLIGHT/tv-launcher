@@ -27,6 +27,9 @@ data class HomePrefs(
     val columns: Int = 5,
     val showClock: Boolean = true,
     val showWeather: Boolean = true,
+    /** Ряд плиток: сеть, входы, таймер сна, настройки */
+    val showQuickTiles: Boolean = true,
+    val showNowPlaying: Boolean = true,
     /** Медленный дрейф обоев; на слабом телевизоре можно выключить */
     val animatedWallpaper: Boolean = true,
     /** Имя встроенных обоев (WallpaperPreset); от них же строится тема */
@@ -45,7 +48,10 @@ class SettingsStore(context: Context) {
 
     val homePrefs: Flow<HomePrefs> =
         observe(
-            setOf(KEY_COLUMNS, KEY_SHOW_CLOCK, KEY_SHOW_WEATHER, KEY_ANIMATED_WALLPAPER, KEY_WALLPAPER, KEY_SCREENSAVER),
+            setOf(
+                KEY_COLUMNS, KEY_SHOW_CLOCK, KEY_SHOW_WEATHER, KEY_SHOW_QUICK_TILES, KEY_SHOW_NOW_PLAYING,
+                KEY_ANIMATED_WALLPAPER, KEY_WALLPAPER, KEY_SCREENSAVER,
+            ),
             ::readHomePrefs,
         )
 
@@ -55,10 +61,19 @@ class SettingsStore(context: Context) {
             putInt(KEY_COLUMNS, home.columns)
             putBoolean(KEY_SHOW_CLOCK, home.showClock)
             putBoolean(KEY_SHOW_WEATHER, home.showWeather)
+            putBoolean(KEY_SHOW_QUICK_TILES, home.showQuickTiles)
+            putBoolean(KEY_SHOW_NOW_PLAYING, home.showNowPlaying)
             putBoolean(KEY_ANIMATED_WALLPAPER, home.animatedWallpaper)
             putString(KEY_WALLPAPER, home.wallpaper)
             putInt(KEY_SCREENSAVER, home.screensaverMinutes)
         }
+    }
+
+    /** Время срабатывания таймера сна (epoch ms); 0 — таймер выключен */
+    val sleepTimerEnd: Flow<Long> = observe(setOf(KEY_SLEEP_TIMER_END)) { prefs.getLong(KEY_SLEEP_TIMER_END, 0L) }
+
+    fun setSleepTimerEnd(endMillis: Long) {
+        prefs.edit { putLong(KEY_SLEEP_TIMER_END, endMillis) }
     }
 
     fun setCity(city: City) {
@@ -110,6 +125,8 @@ class SettingsStore(context: Context) {
             columns = prefs.getInt(KEY_COLUMNS, defaults.columns),
             showClock = prefs.getBoolean(KEY_SHOW_CLOCK, defaults.showClock),
             showWeather = prefs.getBoolean(KEY_SHOW_WEATHER, defaults.showWeather),
+            showQuickTiles = prefs.getBoolean(KEY_SHOW_QUICK_TILES, defaults.showQuickTiles),
+            showNowPlaying = prefs.getBoolean(KEY_SHOW_NOW_PLAYING, defaults.showNowPlaying),
             animatedWallpaper = prefs.getBoolean(KEY_ANIMATED_WALLPAPER, defaults.animatedWallpaper),
             wallpaper = prefs.getString(KEY_WALLPAPER, null) ?: defaults.wallpaper,
             screensaverMinutes = prefs.getInt(KEY_SCREENSAVER, defaults.screensaverMinutes),
@@ -129,6 +146,9 @@ class SettingsStore(context: Context) {
         const val KEY_COLUMNS = "columns"
         const val KEY_SHOW_CLOCK = "show_clock"
         const val KEY_SHOW_WEATHER = "show_weather"
+        const val KEY_SHOW_QUICK_TILES = "show_quick_tiles"
+        const val KEY_SHOW_NOW_PLAYING = "show_now_playing"
+        const val KEY_SLEEP_TIMER_END = "sleep_timer_end"
         const val KEY_ANIMATED_WALLPAPER = "animated_wallpaper"
         const val KEY_WALLPAPER = "wallpaper"
         const val KEY_SCREENSAVER = "screensaver_minutes"

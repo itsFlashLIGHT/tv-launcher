@@ -44,6 +44,8 @@ fun SettingsScreen(
     city: City?,
     prefs: HomePrefs,
     hiddenCount: Int,
+    mediaAccess: Boolean,
+    onRequestMediaAccess: () -> Unit,
     onPickCity: () -> Unit,
     onPickWallpaper: () -> Unit,
     onPreviewScreensaver: () -> Unit,
@@ -126,9 +128,28 @@ fun SettingsScreen(
                 }
             }
             item {
+                SwitchItem(R.string.settings_show_quick_tiles, prefs.showQuickTiles) {
+                    onPrefsChange { it.copy(showQuickTiles = !it.showQuickTiles) }
+                }
+            }
+            item {
                 ValueItem(R.string.settings_columns, prefs.columns.toString()) {
                     onPrefsChange { it.copy(columns = nextColumns(it.columns)) }
                 }
+            }
+
+            item { SectionTitle(R.string.settings_section_now_playing) }
+            item {
+                SwitchItem(R.string.settings_show_now_playing, prefs.showNowPlaying) {
+                    onPrefsChange { it.copy(showNowPlaying = !it.showNowPlaying) }
+                }
+            }
+            item {
+                ValueItem(
+                    title = R.string.settings_media_access,
+                    value = stringResource(if (mediaAccess) R.string.settings_media_access_on else R.string.settings_media_access_off),
+                    onClick = onRequestMediaAccess,
+                )
             }
 
             item { SectionTitle(R.string.settings_section_screensaver) }

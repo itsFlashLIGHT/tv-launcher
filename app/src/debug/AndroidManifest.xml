@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Только debug: тестовый «плеер» для проверки виджета «Сейчас играет» -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name=".MediaSessionDemoActivity"
+            android:exported="true"
+            android:label="Media session demo" />
+    </application>
+</manifest>

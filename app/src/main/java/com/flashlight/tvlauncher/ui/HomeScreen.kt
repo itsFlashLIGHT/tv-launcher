@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,6 +65,13 @@ import com.flashlight.tvlauncher.HomeViewModel
 import com.flashlight.tvlauncher.R
 import com.flashlight.tvlauncher.data.AppEntry
 import com.flashlight.tvlauncher.data.HomePrefs
+import com.flashlight.tvlauncher.data.TvInput
+import com.flashlight.tvlauncher.data.openPlayer
+import com.flashlight.tvlauncher.data.togglePlayPause
+import com.flashlight.tvlauncher.data.openNetworkSettings
+import com.flashlight.tvlauncher.data.openSystemSettings
+import com.flashlight.tvlauncher.data.openTvInput
+import com.flashlight.tvlauncher.data.passthroughInputs
 import com.flashlight.tvlauncher.data.launchApp
 import com.flashlight.tvlauncher.data.openAppInfo
 import com.flashlight.tvlauncher.data.uninstallApp
@@ -93,6 +101,18 @@ private fun HomeContent(viewModel: HomeViewModel) {
     var settingsOpen by remember { mutableStateOf(false) }
     var wallpaperPickerOpen by remember { mutableStateOf(false) }
     var cityPickerOpen by remember { mutableStateOf(false) }
+    val network by viewModel.network.collectAsStateWithLifecycle()
+    val sleepTimerEnd by viewModel.sleepTimerEnd.collectAsStateWithLifecycle()
+    // null — окно входов закрыто; иначе список, считанный в момент открытия
+    var tvInputs by remember { mutableStateOf<List<TvInput>?>(null) }
+    var sleepDialogOpen by remember { mutableStateOf(false) }
+    var sleepAdminDialogOpen by remember { mutableStateOf(false) }
+    var sleepAdminSystemDialogMissing by remember { mutableStateOf(false) }
+    val nowPlaying by viewModel.nowPlaying.collectAsStateWithLifecycle()
+    val mediaAccess by viewModel.mediaAccess.collectAsStateWithLifecycle()
+    val yandexMusic by viewModel.yandexMusic.collectAsStateWithLifecycle()
+    var mediaAccessDialogOpen by remember { mutableStateOf(false) }
+    var mediaAccessSystemScreenMissing by remember { mutableStateOf(false) }
     var menuApp by remember { mutableStateOf<AppEntry?>(null) }
     var hiddenAppsOpen by remember { mutableStateOf(false) }
     var movingKey by remember { mutableStateOf<String?>(null) }
@@ -163,13 +183,79 @@ private fun HomeContent(viewModel: HomeViewModel) {
         )
     }
 
+    tvInputs?.let { inputs ->
+        TvInputsDialog(
+            inputs = inputs,
+            onSelect = {
+                tvInputs = null
+                context.openTvInput(it)
+            },
+            onDismiss = { tvInputs = null },
+        )
+    }
+
+    if (sleepDialogOpen) {
+        SleepTimerDialog(
+            active = sleepTimerEnd > System.currentTimeMillis(),
+            onSelect = { minutes ->
+                sleepDialogOpen = false
+                when {
+                    minutes == 0 -> viewModel.sleepTimer.cancel()
+                    // Без прав администратора таймер бесполезен: сначала объясняем и просим их
+                    !viewModel.sleepTimer.start(minutes) -> sleepAdminDialogOpen = true
+                }
+            },
+            onDismiss = { sleepDialogOpen = false },
+        )
+    }
+
+    if (sleepAdminDialogOpen) {
+        val explanation = stringResource(R.string.sleep_admin_text)
+        PermissionDialog(
+            text = explanation,
+            adbCommand = if (sleepAdminSystemDialogMissing) {
+                "adb shell dpm set-active-admin ${viewModel.sleepTimer.adminComponent.flattenToShortString()}"
+            } else {
+                null
+            },
+            onAllow = {
+                if (viewModel.sleepTimer.requestAdmin(context, explanation)) {
+                    sleepAdminDialogOpen = false
+                } else {
+                    sleepAdminSystemDialogMissing = true
+                }
+            },
+            onDismiss = { sleepAdminDialogOpen = false },
+        )
+    }
+
+    if (mediaAccessDialogOpen) {
+        PermissionDialog(
+            text = stringResource(R.string.media_access_text),
+            adbCommand = if (mediaAccessSystemScreenMissing) {
+                "adb shell cmd notification allow_listener ${viewModel.mediaSessions.listenerComponent.flattenToString()}"
+            } else {
+                null
+            },
+            onAllow = {
+                if (viewModel.mediaSessions.openAccessSettings(context)) {
+                    mediaAccessDialogOpen = false
+                } else {
+                    mediaAccessSystemScreenMissing = true
+                }
+            },
+            onDismiss = { mediaAccessDialogOpen = false },
+        )
+    }
+
     // Заставка по простою: таймер идёт, только пока главный экран на переднем плане
     // и не открыт ни один диалог (нажатия в диалогах сюда не доходят)
     var screensaverOn by remember { mutableStateOf(false) }
     var lastInteraction by remember { mutableLongStateOf(0L) }
     // Кнопка, которой закрыли заставку: её отпускание не должно дойти до карточки
     var swallowKeyUp by remember { mutableStateOf<Key?>(null) }
-    val anyDialogOpen = cityPickerOpen || wallpaperPickerOpen || menuApp != null || hiddenAppsOpen
+    val anyDialogOpen = cityPickerOpen || wallpaperPickerOpen || menuApp != null || hiddenAppsOpen ||
+        tvInputs != null || sleepDialogOpen || sleepAdminDialogOpen || mediaAccessDialogOpen
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lastInteraction, prefs.screensaverMinutes, anyDialogOpen, screensaverOn) {
         if (prefs.screensaverMinutes == 0 || anyDialogOpen || screensaverOn) return@LaunchedEffect
@@ -180,11 +266,40 @@ private fun HomeContent(viewModel: HomeViewModel) {
     }
 
     val widgets: @Composable () -> Unit = {
-        HomeWidgets(
-            prefs = prefs,
-            weatherContent = { WeatherWidget(weather, onClick = { cityPickerOpen = true }, Modifier.size(170.dp)) },
-            onOpenSettings = { settingsOpen = true },
-        )
+        Column {
+            HomeWidgets(
+                prefs = prefs,
+                weatherContent = { WeatherWidget(weather, onClick = { cityPickerOpen = true }, Modifier.size(170.dp)) },
+                nowPlayingContent = if (prefs.showNowPlaying && mediaAccess && (nowPlaying != null || yandexMusic != null)) {
+                    {
+                        val playing = nowPlaying
+                        NowPlayingWidget(
+                            nowPlaying = playing,
+                            onOpenPlayer = { playing?.let(context::openPlayer) },
+                            onPrevious = { playing?.controller?.transportControls?.skipToPrevious() },
+                            onPlayPause = { playing?.controller?.togglePlayPause() },
+                            onNext = { playing?.controller?.transportControls?.skipToNext() },
+                            onOpenYandexMusic = yandexMusic?.let { app -> { context.launchApp(app) } },
+                            modifier = Modifier.width(340.dp).height(170.dp),
+                        )
+                    }
+                } else {
+                    null
+                },
+                onOpenSettings = { settingsOpen = true },
+            )
+            if (prefs.showQuickTiles) {
+                QuickTilesRow(
+                    network = network,
+                    sleepTimerEnd = sleepTimerEnd,
+                    onNetwork = context::openNetworkSettings,
+                    onInputs = { tvInputs = context.passthroughInputs() },
+                    onSleepTimer = { sleepDialogOpen = true },
+                    onSystemSettings = context::openSystemSettings,
+                    modifier = Modifier.padding(top = 20.dp),
+                )
+            }
+        }
     }
 
     Box(
@@ -227,6 +342,11 @@ private fun HomeContent(viewModel: HomeViewModel) {
                     city = city,
                     prefs = prefs,
                     hiddenCount = hiddenApps.size,
+                mediaAccess = mediaAccess,
+                onRequestMediaAccess = {
+                    mediaAccessSystemScreenMissing = false
+                    mediaAccessDialogOpen = true
+                },
                     onPickCity = { cityPickerOpen = true },
                     onPickWallpaper = { wallpaperPickerOpen = true },
                     onPreviewScreensaver = { screensaverOn = true },
@@ -394,6 +514,8 @@ private fun LazyGridScope.appItems(apps: List<AppEntry>, tile: @Composable LazyG
 private fun HomeWidgets(
     prefs: HomePrefs,
     weatherContent: @Composable () -> Unit,
+    /** null — виджет «Сейчас играет» не показывается */
+    nowPlayingContent: (@Composable () -> Unit)?,
     onOpenSettings: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -401,7 +523,11 @@ private fun HomeWidgets(
             AnalogClockWidget(Modifier.size(190.dp))
             Spacer(Modifier.width(28.dp))
         }
-        if (prefs.showWeather) weatherContent()
+        if (prefs.showWeather) {
+            weatherContent()
+            Spacer(Modifier.width(28.dp))
+        }
+        nowPlayingContent?.invoke()
         Spacer(Modifier.weight(1f))
         SettingsButton(onOpenSettings, Modifier.align(Alignment.Top))
     }

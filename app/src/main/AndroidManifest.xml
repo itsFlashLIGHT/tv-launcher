@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Пункт «Удалить» в меню приложения -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Плитка сети -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Таймер сна: точное срабатывание будильника -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <uses-feature
         android:name="android.software.leanback"
@@ -56,6 +60,35 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Таймер сна: будильник гасит экран через права администратора -->
+        <receiver
+            android:name=".data.SleepTimerReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".data.SleepAdminReceiver"
+            android:description="@string/sleep_admin_description"
+            android:exported="true"
+            android:label="@string/sleep_admin_label"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- «Сейчас играет»: доступ к медиасессиям других приложений идёт через слушатель уведомлений -->
+        <service
+            android:name=".data.MediaListenerService"
+            android:exported="true"
+            android:label="@string/media_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- Системная заставка: часы и погода в цветах выбранных обоев -->
         <service
