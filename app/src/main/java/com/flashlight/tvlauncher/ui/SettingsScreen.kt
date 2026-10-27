@@ -31,8 +31,12 @@ import com.flashlight.tvlauncher.R
 import com.flashlight.tvlauncher.data.City
 import com.flashlight.tvlauncher.data.HomePrefs
 import com.flashlight.tvlauncher.data.openSystemSettings
+import com.flashlight.tvlauncher.ui.theme.WallpaperPreset
 
 private val COLUMN_CHOICES = listOf(4, 5, 6)
+
+/** Минуты простоя до заставки; 0 — выключена */
+private val SCREENSAVER_CHOICES = listOf(0, 5, 10, 15, 30)
 
 /** Экран настроек лаунчера; «Назад» возвращает на главный экран */
 @Composable
@@ -41,6 +45,8 @@ fun SettingsScreen(
     prefs: HomePrefs,
     hiddenCount: Int,
     onPickCity: () -> Unit,
+    onPickWallpaper: () -> Unit,
+    onPreviewScreensaver: () -> Unit,
     onPrefsChange: ((HomePrefs) -> HomePrefs) -> Unit,
     onShowHidden: () -> Unit,
     onClose: () -> Unit,
@@ -90,6 +96,24 @@ fun SettingsScreen(
                 )
             }
 
+            item { SectionTitle(R.string.settings_section_look) }
+            item {
+                ValueItem(
+                    title = R.string.settings_wallpaper,
+                    value = stringResource(WallpaperPreset.fromName(prefs.wallpaper).title),
+                    onClick = onPickWallpaper,
+                )
+            }
+            item {
+                SwitchItem(
+                    title = R.string.settings_animated_wallpaper,
+                    checked = prefs.animatedWallpaper,
+                    description = R.string.settings_animated_wallpaper_hint,
+                ) {
+                    onPrefsChange { it.copy(animatedWallpaper = !it.animatedWallpaper) }
+                }
+            }
+
             item { SectionTitle(R.string.settings_section_home) }
             item {
                 SwitchItem(R.string.settings_show_clock, prefs.showClock) {
@@ -106,15 +130,22 @@ fun SettingsScreen(
                     onPrefsChange { it.copy(columns = nextColumns(it.columns)) }
                 }
             }
+
+            item { SectionTitle(R.string.settings_section_screensaver) }
             item {
-                SwitchItem(
-                    title = R.string.settings_animated_wallpaper,
-                    checked = prefs.animatedWallpaper,
-                    description = R.string.settings_animated_wallpaper_hint,
+                val minutes = prefs.screensaverMinutes
+                ValueItem(
+                    title = R.string.settings_screensaver_after,
+                    value = if (minutes == 0) {
+                        stringResource(R.string.settings_screensaver_off)
+                    } else {
+                        stringResource(R.string.settings_screensaver_minutes, minutes)
+                    },
                 ) {
-                    onPrefsChange { it.copy(animatedWallpaper = !it.animatedWallpaper) }
+                    onPrefsChange { it.copy(screensaverMinutes = nextChoice(SCREENSAVER_CHOICES, it.screensaverMinutes)) }
                 }
             }
+            item { ValueItem(R.string.settings_screensaver_preview, value = "", onClick = onPreviewScreensaver) }
 
             item { SectionTitle(R.string.settings_section_apps) }
             item {
@@ -138,8 +169,11 @@ fun SettingsScreen(
 }
 
 /** 4 → 5 → 6 → 4 */
-private fun nextColumns(current: Int): Int =
-    COLUMN_CHOICES[(COLUMN_CHOICES.indexOf(current) + 1) % COLUMN_CHOICES.size]
+private fun nextColumns(current: Int): Int = nextChoice(COLUMN_CHOICES, current)
+
+/** Следующее значение по кругу; неизвестное текущее — первое значение */
+private fun nextChoice(choices: List<Int>, current: Int): Int =
+    choices[(choices.indexOf(current) + 1) % choices.size]
 
 @Composable
 private fun SectionTitle(@StringRes title: Int) {

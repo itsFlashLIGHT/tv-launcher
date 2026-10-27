@@ -1,7 +1,11 @@
 package com.flashlight.tvlauncher.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +26,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,7 +49,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -59,16 +68,30 @@ import com.flashlight.tvlauncher.data.launchApp
 import com.flashlight.tvlauncher.data.openAppInfo
 import com.flashlight.tvlauncher.data.uninstallApp
 import com.flashlight.tvlauncher.ui.theme.PillShape
+import com.flashlight.tvlauncher.ui.theme.TvLauncherTheme
+import com.flashlight.tvlauncher.ui.theme.WallpaperPreset
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
+    val prefs by viewModel.homePrefs.collectAsStateWithLifecycle()
+    // Тема строится из цвета обоев: смена обоев перекрашивает весь лаунчер
+    TvLauncherTheme(WallpaperPreset.fromName(prefs.wallpaper)) {
+        HomeContent(viewModel)
+    }
+}
+
+@Composable
+private fun HomeContent(viewModel: HomeViewModel) {
     val apps by viewModel.apps.collectAsStateWithLifecycle()
     val weather by viewModel.weather.collectAsStateWithLifecycle()
     val city by viewModel.city.collectAsStateWithLifecycle()
     val prefs by viewModel.homePrefs.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    val preset = WallpaperPreset.fromName(prefs.wallpaper)
     var settingsOpen by remember { mutableStateOf(false) }
+    var wallpaperPickerOpen by remember { mutableStateOf(false) }
     var cityPickerOpen by remember { mutableStateOf(false) }
     var menuApp by remember { mutableStateOf<AppEntry?>(null) }
     var hiddenAppsOpen by remember { mutableStateOf(false) }
@@ -129,6 +152,33 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         }
     }
 
+    if (wallpaperPickerOpen) {
+        WallpaperPickerDialog(
+            current = preset,
+            onSelect = { selected ->
+                viewModel.updateHomePrefs { it.copy(wallpaper = selected.name) }
+                wallpaperPickerOpen = false
+            },
+            onDismiss = { wallpaperPickerOpen = false },
+        )
+    }
+
+    // Заставка по простою: таймер идёт, только пока главный экран на переднем плане
+    // и не открыт ни один диалог (нажатия в диалогах сюда не доходят)
+    var screensaverOn by remember { mutableStateOf(false) }
+    var lastInteraction by remember { mutableLongStateOf(0L) }
+    // Кнопка, которой закрыли заставку: её отпускание не должно дойти до карточки
+    var swallowKeyUp by remember { mutableStateOf<Key?>(null) }
+    val anyDialogOpen = cityPickerOpen || wallpaperPickerOpen || menuApp != null || hiddenAppsOpen
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lastInteraction, prefs.screensaverMinutes, anyDialogOpen, screensaverOn) {
+        if (prefs.screensaverMinutes == 0 || anyDialogOpen || screensaverOn) return@LaunchedEffect
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            delay(prefs.screensaverMinutes * 60_000L)
+            screensaverOn = true
+        }
+    }
+
     val widgets: @Composable () -> Unit = {
         HomeWidgets(
             prefs = prefs,
@@ -137,62 +187,98 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         )
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Wallpaper(animated = prefs.animatedWallpaper)
-
-        if (settingsOpen) {
-            SettingsScreen(
-                city = city,
-                prefs = prefs,
-                hiddenCount = hiddenApps.size,
-                onPickCity = { cityPickerOpen = true },
-                onPrefsChange = viewModel::updateHomePrefs,
-                onShowHidden = { hiddenAppsOpen = true },
-                onClose = { settingsOpen = false },
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                lastInteraction = System.currentTimeMillis()
+                when {
+                    screensaverOn && event.type == KeyEventType.KeyDown -> {
+                        screensaverOn = false
+                        swallowKeyUp = event.key
+                        true
+                    }
+                    event.type == KeyEventType.KeyUp && event.key == swallowKeyUp -> {
+                        swallowKeyUp = null
+                        true
+                    }
+                    else -> screensaverOn
+                }
+            },
+    ) {
+        if (screensaverOn) {
+            // Заставке нужен фокус: без сфокусированного элемента нажатия не доходят даже до корня
+            val screensaverFocus = remember { FocusRequester() }
+            ScreensaverContent(
+                preset = preset,
+                weather = weather,
+                showWeather = prefs.showWeather,
+                modifier = Modifier.focusRequester(screensaverFocus).focusable(),
             )
+            LaunchedEffect(Unit) {
+                withFrameNanos {}
+                runCatching { screensaverFocus.requestFocus() }
+            }
         } else {
-            // Отступы 48/27 dp — безопасная зона телевизора (overscan)
-            Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
-                val home = apps
-                if (home != null && home.favorites.isEmpty() && home.others.isEmpty() && home.hidden.isEmpty()) {
-                    widgets()
+            Wallpaper(preset, animated = prefs.animatedWallpaper)
+
+            if (settingsOpen) {
+                SettingsScreen(
+                    city = city,
+                    prefs = prefs,
+                    hiddenCount = hiddenApps.size,
+                    onPickCity = { cityPickerOpen = true },
+                    onPickWallpaper = { wallpaperPickerOpen = true },
+                    onPreviewScreensaver = { screensaverOn = true },
+                    onPrefsChange = viewModel::updateHomePrefs,
+                    onShowHidden = { hiddenAppsOpen = true },
+                    onClose = { settingsOpen = false },
+                )
+            } else {
+                // Отступы 48/27 dp — безопасная зона телевизора (overscan)
+                Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 27.dp)) {
+                    val home = apps
+                    if (home != null && home.favorites.isEmpty() && home.others.isEmpty() && home.hidden.isEmpty()) {
+                        widgets()
+                        Text(
+                            text = stringResource(R.string.apps_empty),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else if (home != null) {
+                        AppGrid(
+                            apps = home,
+                            columns = prefs.columns,
+                            header = widgets,
+                            movingKey = movingKey,
+                            refocusToken = refocusToken,
+                            onOpen = context::launchApp,
+                            onMenu = { menuApp = it },
+                            onMove = viewModel::move,
+                            onMoveDone = { movingKey = null },
+                            onShowHidden = { hiddenAppsOpen = true },
+                        )
+                    }
+                }
+
+                if (movingKey != null) {
                     Text(
-                        text = stringResource(R.string.apps_empty),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else if (home != null) {
-                    AppGrid(
-                        apps = home,
-                        columns = prefs.columns,
-                        header = widgets,
-                        movingKey = movingKey,
-                        refocusToken = refocusToken,
-                        onOpen = context::launchApp,
-                        onMenu = { menuApp = it },
-                        onMove = viewModel::move,
-                        onMoveDone = { movingKey = null },
-                        onShowHidden = { hiddenAppsOpen = true },
+                        text = stringResource(R.string.move_hint),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 27.dp)
+                            .clip(PillShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                            .padding(horizontal = 24.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
-            }
-
-            if (movingKey != null) {
-                Text(
-                    text = stringResource(R.string.move_hint),
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 27.dp)
-                        .clip(PillShape)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-                        .padding(horizontal = 24.dp, vertical = 10.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppGrid(
     apps: HomeApps,
@@ -228,50 +314,54 @@ private fun AppGrid(
         )
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        state = gridState,
-        // В режиме перемещения стрелки двигают приложение, а не фокус
-        modifier = Modifier.onPreviewKeyEvent { event ->
-            val app = movingApp ?: return@onPreviewKeyEvent false
-            when (event.key) {
-                Key.DirectionLeft -> if (event.type == KeyEventType.KeyDown) onMove(app, -1)
-                Key.DirectionRight -> if (event.type == KeyEventType.KeyDown) onMove(app, 1)
-                Key.DirectionUp -> if (event.type == KeyEventType.KeyDown) onMove(app, -columns)
-                Key.DirectionDown -> if (event.type == KeyEventType.KeyDown) onMove(app, columns)
-                // Выходим по отпусканию OK: иначе KeyUp долетит до карточки и запустит приложение
-                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> if (event.type == KeyEventType.KeyUp) onMoveDone()
-                else -> return@onPreviewKeyEvent false
+    // На TV Compose по умолчанию тянет фокус к трети экрана и уводит виджеты за верхний край;
+    // нам нужна минимальная прокрутка — ровно чтобы карточка стала видна
+    CompositionLocalProvider(LocalBringIntoViewSpec provides MinimalBringIntoViewSpec) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            state = gridState,
+            // В режиме перемещения стрелки двигают приложение, а не фокус
+            modifier = Modifier.onPreviewKeyEvent { event ->
+                val app = movingApp ?: return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> if (event.type == KeyEventType.KeyDown) onMove(app, -1)
+                    Key.DirectionRight -> if (event.type == KeyEventType.KeyDown) onMove(app, 1)
+                    Key.DirectionUp -> if (event.type == KeyEventType.KeyDown) onMove(app, -columns)
+                    Key.DirectionDown -> if (event.type == KeyEventType.KeyDown) onMove(app, columns)
+                    // Выходим по отпусканию OK: иначе KeyUp долетит до карточки и запустит приложение
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> if (event.type == KeyEventType.KeyUp) onMoveDone()
+                    else -> return@onPreviewKeyEvent false
+                }
+                true
+            },
+            // Запас по краям, чтобы увеличение и свечение фокуса не обрезались
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            item(key = "widgets", span = { GridItemSpan(maxLineSpan) }) { header() }
+            if (hasFavorites) {
+                sectionHeader("header_favorites") { stringResource(R.string.favorites_title) }
+                appItems(apps.favorites, tile)
             }
-            true
-        },
-        // Запас по краям, чтобы увеличение и свечение фокуса не обрезались
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(28.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        item(key = "widgets", span = { GridItemSpan(maxLineSpan) }) { header() }
-        if (hasFavorites) {
-            sectionHeader("header_favorites") { stringResource(R.string.favorites_title) }
-            appItems(apps.favorites, tile)
-        }
-        sectionHeader("header_apps") { stringResource(R.string.apps_title) }
-        appItems(apps.others, tile)
-        if (apps.hidden.isNotEmpty()) {
-            item(key = "hidden_button", span = { GridItemSpan(maxLineSpan) }) {
-                Box {
-                    Surface(
-                        onClick = onShowHidden,
-                        shape = ClickableSurfaceDefaults.shape(PillShape),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                        ),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.hidden_apps_button, apps.hidden.size),
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
+            sectionHeader("header_apps") { stringResource(R.string.apps_title) }
+            appItems(apps.others, tile)
+            if (apps.hidden.isNotEmpty()) {
+                item(key = "hidden_button", span = { GridItemSpan(maxLineSpan) }) {
+                    Box {
+                        Surface(
+                            onClick = onShowHidden,
+                            shape = ClickableSurfaceDefaults.shape(PillShape),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                            ),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.hidden_apps_button, apps.hidden.size),
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
                     }
                 }
             }
@@ -338,6 +428,20 @@ private fun SettingsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 contentDescription = stringResource(R.string.settings_title),
                 modifier = Modifier.size(28.dp),
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private val MinimalBringIntoViewSpec = object : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val trailingEdge = offset + size
+        return when {
+            offset >= 0 && trailingEdge <= containerSize -> 0f
+            // Элемент больше видимой области — не дёргаем
+            offset < 0 && trailingEdge > containerSize -> 0f
+            offset < 0 -> offset
+            else -> trailingEdge - containerSize
         }
     }
 }

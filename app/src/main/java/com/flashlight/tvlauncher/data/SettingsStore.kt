@@ -29,6 +29,10 @@ data class HomePrefs(
     val showWeather: Boolean = true,
     /** Медленный дрейф обоев; на слабом телевизоре можно выключить */
     val animatedWallpaper: Boolean = true,
+    /** Имя встроенных обоев (WallpaperPreset); от них же строится тема */
+    val wallpaper: String = "Twilight",
+    /** Через сколько минут простоя показать заставку; 0 — не показывать */
+    val screensaverMinutes: Int = 10,
 )
 
 /** Настройки лаунчера в SharedPreferences */
@@ -40,7 +44,10 @@ class SettingsStore(context: Context) {
     val appLayout: Flow<AppLayout> = observe(setOf(KEY_FAVORITES, KEY_HIDDEN, KEY_ORDER), ::readAppLayout)
 
     val homePrefs: Flow<HomePrefs> =
-        observe(setOf(KEY_COLUMNS, KEY_SHOW_CLOCK, KEY_SHOW_WEATHER, KEY_ANIMATED_WALLPAPER), ::readHomePrefs)
+        observe(
+            setOf(KEY_COLUMNS, KEY_SHOW_CLOCK, KEY_SHOW_WEATHER, KEY_ANIMATED_WALLPAPER, KEY_WALLPAPER, KEY_SCREENSAVER),
+            ::readHomePrefs,
+        )
 
     fun updateHomePrefs(transform: (HomePrefs) -> HomePrefs) {
         val home = transform(readHomePrefs())
@@ -49,6 +56,8 @@ class SettingsStore(context: Context) {
             putBoolean(KEY_SHOW_CLOCK, home.showClock)
             putBoolean(KEY_SHOW_WEATHER, home.showWeather)
             putBoolean(KEY_ANIMATED_WALLPAPER, home.animatedWallpaper)
+            putString(KEY_WALLPAPER, home.wallpaper)
+            putInt(KEY_SCREENSAVER, home.screensaverMinutes)
         }
     }
 
@@ -102,6 +111,8 @@ class SettingsStore(context: Context) {
             showClock = prefs.getBoolean(KEY_SHOW_CLOCK, defaults.showClock),
             showWeather = prefs.getBoolean(KEY_SHOW_WEATHER, defaults.showWeather),
             animatedWallpaper = prefs.getBoolean(KEY_ANIMATED_WALLPAPER, defaults.animatedWallpaper),
+            wallpaper = prefs.getString(KEY_WALLPAPER, null) ?: defaults.wallpaper,
+            screensaverMinutes = prefs.getInt(KEY_SCREENSAVER, defaults.screensaverMinutes),
         )
     }
 
@@ -119,6 +130,8 @@ class SettingsStore(context: Context) {
         const val KEY_SHOW_CLOCK = "show_clock"
         const val KEY_SHOW_WEATHER = "show_weather"
         const val KEY_ANIMATED_WALLPAPER = "animated_wallpaper"
+        const val KEY_WALLPAPER = "wallpaper"
+        const val KEY_SCREENSAVER = "screensaver_minutes"
         val DEFAULT_CITY = City("Арсеньев", "Приморский Край, Россия", 44.15695, 133.27332)
     }
 }

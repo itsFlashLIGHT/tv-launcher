@@ -18,6 +18,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import com.flashlight.tvlauncher.ui.theme.LocalLauncherAccents
 import com.flashlight.tvlauncher.ui.theme.scallopPath
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
@@ -35,14 +36,14 @@ import kotlin.math.sin
 @Composable
 fun AnalogClockWidget(
     modifier: Modifier = Modifier,
-    // Светлая палитра Material 3 (baseline light): белый циферблат на тёмных обоях
+    // Белый циферблат на тёмных обоях; акценты — тёмные тона цвета текущих обоев
     faceColor: Color = Color.White,
     numeralColor: Color = Color(0xFF49454F),
     tickColor: Color = Color(0xFFCAC4D0),
-    labelColor: Color = Color(0xFF6750A4),
-    hourHandColor: Color = Color(0xFF6750A4),
-    minuteHandColor: Color = Color(0xFF9A82DB),
-    secondHandColor: Color = Color(0xFFE8735C),
+    labelColor: Color = LocalLauncherAccents.current.clockLabel,
+    hourHandColor: Color = LocalLauncherAccents.current.clockHourHand,
+    minuteHandColor: Color = LocalLauncherAccents.current.clockMinuteHand,
+    secondHandColor: Color = LocalLauncherAccents.current.clockSecondHand,
 ) {
     val now by produceState(LocalDateTime.now()) {
         while (true) {
