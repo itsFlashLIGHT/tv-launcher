@@ -3,6 +3,17 @@
     <string name="app_name">TV Launcher</string>
     <string name="apps_title">Приложения</string>
     <string name="apps_empty">Приложения не найдены</string>
+    <string name="favorites_title">Избранное</string>
+    <string name="hidden_apps_button">Скрытые приложения · %1$d</string>
+    <string name="hidden_apps_title">Скрытые приложения</string>
+    <string name="hidden_apps_unhide">Показать на главном экране</string>
+    <string name="move_hint">Стрелками переместите приложение · OK — готово</string>
+    <string name="action_move">Переместить</string>
+    <string name="action_favorite">Добавить в избранное</string>
+    <string name="action_unfavorite">Убрать из избранного</string>
+    <string name="action_hide">Скрыть</string>
+    <string name="action_info">О приложении</string>
+    <string name="action_uninstall">Удалить</string>
     <string name="city_picker_title">Город для погоды</string>
     <string name="city_picker_hint">Название города</string>
     <string name="city_picker_current">Сейчас: %1$s</string>

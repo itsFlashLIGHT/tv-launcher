@@ -3,16 +3,13 @@ package com.flashlight.tvlauncher.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,7 +37,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -76,48 +72,34 @@ fun CityPickerDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    LauncherDialog(title = stringResource(R.string.city_picker_title), onDismiss = onDismiss) {
         val colors = MaterialTheme.colorScheme
-        Column(
-            Modifier
-                .width(560.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(colors.surface)
-                .padding(28.dp),
-        ) {
+        SearchField(query, onQueryChange = { query = it }, Modifier.focusRequester(fieldFocus))
+        Spacer(Modifier.height(12.dp))
+
+        val status = when {
+            query.isBlank() -> currentCity?.let { stringResource(R.string.city_picker_current, it.name) }
+            searching -> stringResource(R.string.city_picker_searching)
+            results.isEmpty() -> stringResource(R.string.city_picker_not_found)
+            else -> null
+        }
+        if (status != null) {
             Text(
-                text = stringResource(R.string.city_picker_title),
-                style = MaterialTheme.typography.headlineSmall,
-                color = colors.onSurface,
+                text = status,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
             )
-            Spacer(Modifier.height(20.dp))
-            SearchField(query, onQueryChange = { query = it }, Modifier.focusRequester(fieldFocus))
-            Spacer(Modifier.height(12.dp))
+        }
 
-            val status = when {
-                query.isBlank() -> currentCity?.let { stringResource(R.string.city_picker_current, it.name) }
-                searching -> stringResource(R.string.city_picker_searching)
-                results.isEmpty() -> stringResource(R.string.city_picker_not_found)
-                else -> null
-            }
-            if (status != null) {
-                Text(
-                    text = status,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
+        LazyColumn(Modifier.heightIn(max = 300.dp)) {
+            items(results, key = { "${it.latitude},${it.longitude}" }) { city ->
+                ListItem(
+                    selected = false,
+                    onClick = { onSelect(city) },
+                    headlineContent = { Text(city.name) },
+                    supportingContent = { Text(city.region) },
                 )
-            }
-
-            LazyColumn(Modifier.heightIn(max = 300.dp)) {
-                items(results, key = { "${it.latitude},${it.longitude}" }) { city ->
-                    ListItem(
-                        selected = false,
-                        onClick = { onSelect(city) },
-                        headlineContent = { Text(city.name) },
-                        supportingContent = { Text(city.region) },
-                    )
-                }
             }
         }
     }

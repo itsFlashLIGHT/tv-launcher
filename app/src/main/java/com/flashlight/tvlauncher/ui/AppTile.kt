@@ -38,6 +38,8 @@ fun AppTile(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Режим перемещения: карточка крупнее и с рамкой другого цвета */
+    moving: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -51,16 +53,19 @@ fun AppTile(
                 .aspectRatio(2f)
                 .onFocusChanged { focused = it.hasFocus },
             shape = ClickableSurfaceDefaults.shape(PillShape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = if (moving) 1.14f else 1.08f),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = colors.surfaceVariant.copy(alpha = 0.7f),
                 focusedContainerColor = colors.surfaceVariant,
             ),
             border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(BorderStroke(2.dp, colors.primary), shape = PillShape),
+                focusedBorder = Border(
+                    BorderStroke(if (moving) 3.dp else 2.dp, if (moving) colors.tertiary else colors.primary),
+                    shape = PillShape,
+                ),
             ),
             glow = ClickableSurfaceDefaults.glow(
-                focusedGlow = Glow(colors.primary.copy(alpha = 0.5f), 16.dp),
+                focusedGlow = Glow((if (moving) colors.tertiary else colors.primary).copy(alpha = 0.5f), 16.dp),
             ),
         ) {
             if (app.banner != null) {

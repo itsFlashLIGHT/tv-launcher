@@ -3,6 +3,7 @@ package com.flashlight.tvlauncher.data
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.ResolveInfo
 import android.net.Uri
@@ -29,6 +30,8 @@ data class AppEntry(
     val category: String,
     val banner: ImageBitmap?,
     val icon: ImageBitmap,
+    /** Предустановленное приложение: удалить его нельзя */
+    val isSystem: Boolean,
 ) {
     val packageName: String get() = component.packageName
     val key: String get() = component.flattenToString()
@@ -101,6 +104,7 @@ class AppRepository(private val context: Context) {
             category = category,
             banner = bannerBitmap,
             icon = info.loadIcon(packageManager).toBitmap(ICON_SIZE_PX, ICON_SIZE_PX).asImageBitmap(),
+            isSystem = activity.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0,
         )
     }
 
@@ -115,6 +119,13 @@ fun Context.launchApp(app: AppEntry) {
         .addCategory(app.category)
         .setComponent(app.component)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+    runCatching { startActivity(intent) }
+}
+
+/** Системный диалог удаления; список приложений обновится сам через LauncherApps */
+fun Context.uninstallApp(app: AppEntry) {
+    val intent = Intent(Intent.ACTION_DELETE, Uri.fromParts("package", app.packageName, null))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { startActivity(intent) }
 }
 

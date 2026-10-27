@@ -3,6 +3,8 @@
 
     <!-- Погода (Open-Meteo) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Пункт «Удалить» в меню приложения -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <uses-feature
         android:name="android.software.leanback"
