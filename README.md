@@ -57,11 +57,13 @@
    adb connect 192.168.1.128:5555
    ```
 
-2. Соберите и установите APK (или скачайте готовый из Releases, когда он появится):
+2. Скачайте APK из [последнего релиза](https://github.com/itsFlashLIGHT/tv-launcher/releases/latest) и установите его:
 
    ```bash
-   ./gradlew :app:installRelease
+   adb install tv-launcher-0.1.0.apk
    ```
+
+   Или соберите и установите из исходников: `./gradlew :app:installRelease`.
 
 3. Назначьте лаунчер домашним экраном:
 
@@ -118,4 +120,4 @@ app/src/main/java/com/flashlight/tvlauncher/
 
 A Pixel-style home screen for Android TV built with Kotlin and Compose for TV. It has oval app cards, an analog clock and weather widget, a Now Playing card that controls Yandex Music, YouTube and other players, quick tiles (network, HDMI inputs, sleep timer, settings), favorites, reordering and hidden apps, five wallpapers that recolor the whole UI, and a screensaver that dims at night. The UI is available in English and Russian.
 
-Install it with `./gradlew :app:installRelease`, then make it the home app with `adb shell cmd package set-home-activity com.flashlight.tvlauncher/.MainActivity`. The optional permissions are listed in step 4 above. Requires Android 11+.
+Download the APK from [Releases](https://github.com/itsFlashLIGHT/tv-launcher/releases/latest) or build it with `./gradlew :app:installRelease`, then make it the home app with `adb shell cmd package set-home-activity com.flashlight.tvlauncher/.MainActivity`. The optional permissions are listed in step 4 above. Requires Android 11+.
