@@ -328,6 +328,8 @@ private fun HomeContent(viewModel: HomeViewModel) {
                 preset = preset,
                 weather = weather,
                 showWeather = prefs.showWeather,
+                nowPlaying = nowPlaying.takeIf { prefs.showNowPlaying },
+                nightDim = prefs.screensaverNightDim,
                 modifier = Modifier.focusRequester(screensaverFocus).focusable(),
             )
             LaunchedEffect(Unit) {

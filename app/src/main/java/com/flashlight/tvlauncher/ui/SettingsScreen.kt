@@ -166,6 +166,11 @@ fun SettingsScreen(
                     onPrefsChange { it.copy(screensaverMinutes = nextChoice(SCREENSAVER_CHOICES, it.screensaverMinutes)) }
                 }
             }
+            item {
+                SwitchItem(R.string.settings_screensaver_night_dim, prefs.screensaverNightDim) {
+                    onPrefsChange { it.copy(screensaverNightDim = !it.screensaverNightDim) }
+                }
+            }
             item { ValueItem(R.string.settings_screensaver_preview, value = "", onClick = onPreviewScreensaver) }
 
             item { SectionTitle(R.string.settings_section_apps) }

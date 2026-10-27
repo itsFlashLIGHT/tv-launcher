@@ -36,6 +36,7 @@ data class HomePrefs(
     val wallpaper: String = "Twilight",
     /** Через сколько минут простоя показать заставку; 0 — не показывать */
     val screensaverMinutes: Int = 10,
+    val screensaverNightDim: Boolean = true,
 )
 
 /** Настройки лаунчера в SharedPreferences */
@@ -50,7 +51,7 @@ class SettingsStore(context: Context) {
         observe(
             setOf(
                 KEY_COLUMNS, KEY_SHOW_CLOCK, KEY_SHOW_WEATHER, KEY_SHOW_QUICK_TILES, KEY_SHOW_NOW_PLAYING,
-                KEY_ANIMATED_WALLPAPER, KEY_WALLPAPER, KEY_SCREENSAVER,
+                KEY_ANIMATED_WALLPAPER, KEY_WALLPAPER, KEY_SCREENSAVER, KEY_SCREENSAVER_NIGHT_DIM,
             ),
             ::readHomePrefs,
         )
@@ -66,6 +67,7 @@ class SettingsStore(context: Context) {
             putBoolean(KEY_ANIMATED_WALLPAPER, home.animatedWallpaper)
             putString(KEY_WALLPAPER, home.wallpaper)
             putInt(KEY_SCREENSAVER, home.screensaverMinutes)
+            putBoolean(KEY_SCREENSAVER_NIGHT_DIM, home.screensaverNightDim)
         }
     }
 
@@ -130,6 +132,7 @@ class SettingsStore(context: Context) {
             animatedWallpaper = prefs.getBoolean(KEY_ANIMATED_WALLPAPER, defaults.animatedWallpaper),
             wallpaper = prefs.getString(KEY_WALLPAPER, null) ?: defaults.wallpaper,
             screensaverMinutes = prefs.getInt(KEY_SCREENSAVER, defaults.screensaverMinutes),
+            screensaverNightDim = prefs.getBoolean(KEY_SCREENSAVER_NIGHT_DIM, defaults.screensaverNightDim),
         )
     }
 
@@ -152,6 +155,7 @@ class SettingsStore(context: Context) {
         const val KEY_ANIMATED_WALLPAPER = "animated_wallpaper"
         const val KEY_WALLPAPER = "wallpaper"
         const val KEY_SCREENSAVER = "screensaver_minutes"
+        const val KEY_SCREENSAVER_NIGHT_DIM = "screensaver_night_dim"
         val DEFAULT_CITY = City("Арсеньев", "Приморский Край, Россия", 44.15695, 133.27332)
     }
 }

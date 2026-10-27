@@ -14,6 +14,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.flashlight.tvlauncher.data.HomePrefs
+import com.flashlight.tvlauncher.data.MediaSessions
 import com.flashlight.tvlauncher.data.SettingsStore
 import com.flashlight.tvlauncher.data.Weather
 import com.flashlight.tvlauncher.data.WeatherRepository
@@ -23,7 +24,7 @@ import com.flashlight.tvlauncher.ui.theme.WallpaperPreset
 import kotlinx.coroutines.flow.first
 
 /**
- * Системная заставка Android (Daydream) с теми же часами и погодой, что и встроенная.
+ * Системная заставка Android (Daydream) с теми же часами, погодой и треком, что и встроенная.
  * Выбирается в настройках Android или командой
  * `adb shell settings put secure screensaver_components com.flashlight.tvlauncher/.ScreensaverService`.
  */
@@ -48,6 +49,7 @@ class ScreensaverService : DreamService(), LifecycleOwner, SavedStateRegistryOwn
 
         val settings = SettingsStore(this)
         val weatherRepository = WeatherRepository()
+        val mediaSessions = MediaSessions(this)
         val view = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@ScreensaverService)
             setViewTreeSavedStateRegistryOwner(this@ScreensaverService)
@@ -56,9 +58,16 @@ class ScreensaverService : DreamService(), LifecycleOwner, SavedStateRegistryOwn
                 val weather by produceState<Weather?>(null) {
                     value = runCatching { weatherRepository.current(settings.city.first()) }.getOrNull()
                 }
+                val nowPlaying by mediaSessions.nowPlaying().collectAsStateWithLifecycle(null)
                 val preset = WallpaperPreset.fromName(prefs.wallpaper)
                 TvLauncherTheme(preset) {
-                    ScreensaverContent(preset, weather, showWeather = prefs.showWeather)
+                    ScreensaverContent(
+                        preset = preset,
+                        weather = weather,
+                        showWeather = prefs.showWeather,
+                        nowPlaying = nowPlaying.takeIf { prefs.showNowPlaying },
+                        nightDim = prefs.screensaverNightDim,
+                    )
                 }
             }
         }
@@ -71,7 +80,10 @@ class ScreensaverService : DreamService(), LifecycleOwner, SavedStateRegistryOwn
     }
 
     override fun onDreamingStopped() {
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        // Система может вызвать это уже после onDestroy — из DESTROYED переходить некуда
+        if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        }
         super.onDreamingStopped()
     }
 

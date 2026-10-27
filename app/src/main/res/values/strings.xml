@@ -34,6 +34,7 @@
     <string name="settings_screensaver_after">Показывать через</string>
     <string name="settings_screensaver_off">Не показывать</string>
     <string name="settings_screensaver_minutes">%1$d мин</string>
+    <string name="settings_screensaver_night_dim">Приглушать ночью (23:00–7:00)</string>
     <string name="settings_screensaver_preview">Показать сейчас</string>
     <string name="screensaver_name">TV Launcher: часы и погода</string>
     <string name="wallpaper_picker_title">Обои</string>
